@@ -103,7 +103,7 @@ export class BaseNode<T> {
   }
 
   private invalidateChildIndices(child: ElementNode<T>): void {
-    if (this._minInvalidChildIndex == null || child.index < this._minInvalidChildIndex.index) {
+    if (this._minInvalidChildIndex == null || !this._minInvalidChildIndex.isConnected || child.index < this._minInvalidChildIndex.index) {
       this._minInvalidChildIndex = child;
     }
   }
@@ -154,8 +154,11 @@ export class BaseNode<T> {
 
     newNode.nextSibling = referenceNode;
     newNode.previousSibling = referenceNode.previousSibling;
-    newNode.index = referenceNode.index;
-
+    // Ensure that the newNode's index is less than that of the reference node so that
+    // invalidateChildIndices will properly use the newNode as the _minInvalidChildIndex, thus making sure
+    // we will properly update the indexes of all sibiling nodes after the newNode. The value here doesn't matter
+    // since updateChildIndices should calculate the proper indexes.
+    newNode.index = referenceNode.index - 1;
     if (this.firstChild === referenceNode) {
       this.firstChild = newNode;
     } else if (referenceNode.previousSibling) {
@@ -165,7 +168,7 @@ export class BaseNode<T> {
     referenceNode.previousSibling = newNode;
     newNode.parentNode = referenceNode.parentNode;
 
-    this.invalidateChildIndices(referenceNode);
+    this.invalidateChildIndices(newNode);
     this.ownerDocument.queueUpdate();
   }
 
@@ -173,7 +176,7 @@ export class BaseNode<T> {
     if (child.parentNode !== this || !this.ownerDocument.isMounted) {
       return;
     }
-    
+
     if (child.nextSibling) {
       this.invalidateChildIndices(child.nextSibling);
       child.nextSibling.previousSibling = child.previousSibling;
@@ -279,7 +282,7 @@ export class ElementNode<T> extends BaseNode<T> {
       this.node = this.node.clone();
       this.isMutated = true;
     }
-    
+
     this.ownerDocument.markDirty(this);
     return this.node;
   }
@@ -470,6 +473,12 @@ export class Document<T, C extends BaseCollection<T> = BaseCollection<T>> extend
     }
 
     // Next, update dirty collection nodes.
+    // TODO: when updateCollection is called here, shouldn't we be calling this.updateChildIndicies as well? Theoretically it should only update
+    // nodes from _minInvalidChildIndex onwards so the increase in dirtyNodes should be minimal.
+    // Is element.updateNode supposed to handle that (it currently assumes the index stored on the node is correct already).
+    // At the moment, without this call to updateChildIndicies, filtering an async combobox doesn't actually update the index values of the
+    // updated collection...
+    this.updateChildIndices();
     for (let element of this.dirtyNodes) {
       if (element instanceof ElementNode) {
         if (element.isConnected && !element.isHidden) {
@@ -497,7 +506,7 @@ export class Document<T, C extends BaseCollection<T> = BaseCollection<T>> extend
     if (this.dirtyNodes.size === 0 || this.queuedRender) {
       return;
     }
-    
+
     // Only trigger subscriptions once during an update, when the first item changes.
     // React's useSyncExternalStore will call getCollection immediately, to check whether the snapshot changed.
     // If so, React will queue a render to happen after the current commit to our fake DOM finishes.

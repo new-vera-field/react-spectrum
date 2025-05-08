@@ -18,10 +18,10 @@ import {
 import {controlSize} from './style-utils' with {type: 'macro'};
 import CrossIcon from '../ui-icons/Cross';
 import {FocusableRef} from '@react-types/shared';
+import {focusRing, style} from '../style' with {type: 'macro'};
 import {forwardRef} from 'react';
-import {style} from '../style' with {type: 'macro'};
+import {pressScale} from './pressScale';
 import {useFocusableRef} from '@react-spectrum/utils';
-
 interface ClearButtonStyleProps {
   /**
    * The size of the ClearButton.
@@ -34,31 +34,37 @@ interface ClearButtonStyleProps {
 interface ClearButtonRenderProps extends ButtonRenderProps, ClearButtonStyleProps {}
 interface ClearButtonProps extends ButtonProps, ClearButtonStyleProps {}
 
-export const ClearButton = forwardRef(function ClearButton(props: ClearButtonProps, ref: FocusableRef<HTMLButtonElement>) {
-  let domRef = useFocusableRef(ref);
+const visibleClearButton = style<ClearButtonRenderProps>({
+  ...focusRing(),
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  height: 'full',
+  width: controlSize(),
+  flexShrink: 0,
+  borderRadius: 'full',
+  borderStyle: 'none',
+  backgroundColor: 'transparent',
+  boxSizing: 'border-box',
+  padding: 0,
+  outlineOffset: -4,
+  color: 'inherit',
+  '--iconPrimary': {
+    type: 'fill',
+    value: 'currentColor'
+  }
+});
 
+export const ClearButton = forwardRef(function ClearButton(props: ClearButtonProps, ref: FocusableRef<HTMLButtonElement>) {
+  let {size = 'M', ...rest} = props;
+  let domRef = useFocusableRef(ref);
   return (
     <Button
-      {...props}
+      {...rest}
       ref={domRef}
-      className={renderProps => style<ClearButtonRenderProps>({
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        height: 'full',
-        width: controlSize(),
-        flexShrink: 0,
-        borderStyle: 'none',
-        outlineStyle: 'none',
-        backgroundColor: 'transparent',
-        padding: 0,
-        color: 'inherit',
-        '--iconPrimary': {
-          type: 'fill',
-          value: 'currentColor'
-        }
-      })({...renderProps, size: props.size || 'M'})}>
-      <CrossIcon size={props.size || 'M'} />
+      style={pressScale(domRef)}
+      className={renderProps => visibleClearButton({...renderProps, size})}>
+      <CrossIcon size={props.size} />
     </Button>
   );
 });

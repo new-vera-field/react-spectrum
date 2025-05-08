@@ -17,6 +17,11 @@ else
     echo "Verdaccio is NOT running on port 4000."
 fi
 
+# Rename the dist folder from dist/production/docs to verdaccio_dist/COMMIT_HASH_BEFORE_PUBLISH/verdaccio/docs
+# This is so we can have verdaccio build in a separate stream from deploy and deploy_prod
+verdaccio_path=verdaccio_dist/`git rev-parse HEAD~0`/verdaccio
+mkdir -p $verdaccio_path
+
 yarn config set npmPublishRegistry --home $registry
 yarn config set npmRegistryServer --home $registry
 yarn config set npmAlwaysAuth --home false
@@ -34,5 +39,92 @@ cd examples/s2-webpack-5-example
 mkdir icon-test
 cp ../../packages/@react-spectrum/s2/s2wf-icons/S2_Icon_3D_20_N.svg icon-test/S2_Icon_3D_20_N.svg
 npx @react-spectrum/s2-icon-builder -i ./icon-test/S2_Icon_3D_20_N.svg -o ./icon-dist
+
+mkdir icon-library-test
+touch icon-library-test/package.json
+cat > icon-library-test/package.json << EOF
+{
+  "name": "@react-spectrum/icon-library-test",
+  "version": "1.0.0",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/adobe/react-spectrum"
+  },
+  "exports": {
+    "module": {},
+    "main": {},
+    "types": {},
+    "./*": {
+      "types": "./*.d.ts",
+      "module": "./*.mjs",
+      "import": "./*.mjs",
+      "require": "./*.cjs"
+    }
+  },
+  "browserslist": "last 2 Chrome versions, last 2 Safari versions, last 2 Firefox versions, last 2 Edge versions",
+  "dependencies": {
+    "@swc/helpers": "^0.5.0"
+  },
+  "peerDependencies": {
+    "@react-spectrum/s2": "latest",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@babel/plugin-proposal-decorators": "^7.24.1",
+    "@babel/plugin-transform-runtime": "^7.24.3",
+    "@babel/preset-env": "^7.24.3",
+    "@babel/preset-react": "^7.24.1",
+    "@babel/preset-typescript": "^7.24.1",
+    "@react-spectrum/s2-icon-builder": "latest",
+    "@react-spectrum/s2": "latest",
+    "babel-plugin-macros": "^3.0.1",
+    "babel-plugin-react-remove-properties": "^0.3.0",
+    "babel-plugin-transform-glob-import": "^1.0.1",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
+EOF
+
+mkdir icon-library-test/src
+touch icon-library-test/yarn.lock
+cp ../../packages/@react-spectrum/s2/s2wf-icons/S2_Icon_3D_20_N.svg icon-library-test/src/S2_Icon_3D_20_N.svg
+cp ../../packages/@react-spectrum/s2/s2wf-icons/S2_Icon_AlignRight_20_N.svg icon-library-test/src/S2_Icon_AlignRight_20_N.svg
+cp ../../babel.config.json icon-library-test/babel.config.json
+cp ../../svgo.config.json icon-library-test/svgo.config.json
+cd icon-library-test
+echo "Installing and building icon library"
+yarn install --no-immutable
+yarn transform-icons -i './src/*.svg' -o ./ --isLibrary
+
+ls .
+
+yarn config set npmPublishRegistry $registry
+yarn config set npmRegistryServer $registry
+yarn config set npmAlwaysAuth false
+yarn config set npmAuthToken abc
+yarn config set unsafeHttpWhitelist localhost
+npm set registry $registry
+
+git config --global user.email octobot@github.com
+git config --global user.name GitHub Actions
+
+# Publish icon package to verdaccio
+echo "Publishing icon package to verdaccio"
+yarn npm publish --tag latest
+
+echo "Building icon builder fixture"
+cd ../../../scripts/icon-builder-fixture
+yarn install --no-immutable
+yarn build --public-url ./
+
+echo "Moving icon builder fixture to verdaccio"
+mv dist ../../$verdaccio_path/icon-builder-fixture
+
 
 netstat -tpln | awk -F'[[:space:]/:]+' '$5 == 4000 {print $(NF-2)}' | xargs kill
